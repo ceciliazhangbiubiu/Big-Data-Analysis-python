@@ -1,0 +1,119 @@
+Tokenizer
+Tokenization is the process of taking text (such as a sentence) and breaking it into individual terms (usually words). 
+A simple Tokenizer class provides this functionality. The example below shows how to split sentences into sequences of words.
+
+RegexTokenizer allows more advanced tokenization based on regular expression (regex) matching. 
+By default, the parameter “pattern” (regex, default: "\s+") is used as delimiters to split the input text. 
+Alternatively, users can set parameter “gaps” to false indicating the regex “pattern” denotes “tokens” rather than splitting gaps, 
+and find all matching occurrences as the tokenization result.
+
+from pyspark.ml.feature import Tokenizer, RegexTokenizer
+from pyspark.sql.functions import col, udf
+from pyspark.sql.types import IntegerType
+
+sentenceDataFrame = spark.createDataFrame([
+    (0, "Hi I heard about Spark"),
+    (1, "I wish Java could use case classes"),
+    (2, "Logistic,regression,models,are,neat")
+], ["id", "sentence"])
+
+sentenceDataFrame.show()
+
+tokenizer = Tokenizer(inputCol="sentence", outputCol="words")）
+
+tokenized = tokenizer.transform(sentenceDataFrame)
+tokenized.select("sentence", "words").show(）
+
+countTokens = udf(lambda words: len(words), IntegerType())
+
+tokenized = tokenizer.transform(sentenceDataFrame)
+tokenized.select("sentence", "words")\
+    .withColumn("tokens", countTokens(col("words"))).show(truncate=False)
+    
+regexTokenizer = RegexTokenizer(inputCol="sentence", outputCol="words", pattern="\\W")
+# alternatively, pattern="\\w+", gaps(False)
+
+countTokens = udf(lambda words: len(words), IntegerType())
+
+regexTokenized = regexTokenizer.transform(sentenceDataFrame)
+regexTokenized.select("sentence", "words") \
+    .withColumn("tokens", countTokens(col("words"))).show(truncate=False)
+    
+Stop Words Removal
+Stop words are words which should be excluded from the input, typically because the words appear frequently and don’t carry as much meaning.
+
+StopWordsRemover takes as input a sequence of strings (e.g. the output of a Tokenizer) and drops all the stop words from the input sequences. 
+The list of stopwords is specified by the stopWords parameter. Default stop words for some languages are accessible by calling StopWordsRemover.
+loadDefaultStopWords(language), for which available options are “danish”, “dutch”, “english”, “finnish”, “french”, “german”, “hungarian”, “italian”, “norwegian”, “portuguese”, “russian”, “spanish”, “swedish” and “turkish”. 
+A boolean parameter caseSensitive indicates if the matches should be case sensitive (false by default).
+
+from pyspark.ml.feature import StopWordsRemover
+
+sentenceData = spark.createDataFrame([
+    (0, ["I", "saw", "the", "red", "balloon"]),
+    (1, ["Mary", "had", "a", "little", "lamb"])
+], ["id", "raw"])
+
+remover = StopWordsRemover(inputCol="raw", outputCol="filtered")
+remover.transform(sentenceData).show(truncate=False)
+
+n-grams
+An n-gram is a sequence of nn tokens (typically words) for some integer nn. The NGram class can be used to transform input features into nn-grams.
+NGram takes as input a sequence of strings (e.g. the output of a Tokenizer). 
+The parameter n is used to determine the number of terms in each $n$-gram. The output will consist of a sequence of $n$-grams where each $n$-gram is represented by a space-delimited string of $n$ consecutive words. 
+If the input sequence contains fewer than n strings, no output is produced.
+
+from pyspark.ml.feature import NGram
+
+wordDataFrame = spark.createDataFrame([
+    (0, ["Hi", "I", "heard", "about", "Spark"]),
+    (1, ["I", "wish", "Java", "could", "use", "case", "classes"]),
+    (2, ["Logistic", "regression", "models", "are", "neat"])
+], ["id", "words"])
+
+ngram = NGram(n=2, inputCol="words", outputCol="ngrams")
+
+ngramDataFrame = ngram.transform(wordDataFrame)
+ngramDataFrame.select("ngrams").show(truncate=False)
+
+Feature Extractors
+
+from pyspark.ml.feature import HashingTF, IDF, Tokenizer
+
+sentenceData = spark.createDataFrame([
+    (0.0, "Hi I heard about Spark"),
+    (0.0, "I wish Java could use case classes"),
+    (1.0, "Logistic regression models are neat")
+], ["label", "sentence"])
+
+sentenceData.show()
+
+tokenizer = Tokenizer(inputCol="sentence", outputCol="words")
+wordsData = tokenizer.transform(sentenceData)
+wordsData.show(truncate=True)
+
+hashingTF = HashingTF(inputCol="words", outputCol="rawFeatures", numFeatures=20)
+featurizedData = hashingTF.transform(wordsData)
+# alternatively, CountVectorizer can also be used to get term frequency vectors
+
+idf = IDF(inputCol="rawFeatures", outputCol="features")
+idfModel = idf.fit(featurizedData)
+rescaledData = idfModel.transform(featurizedData)
+
+rescaledData.select("label", "features").show()
+
+from pyspark.ml.feature import CountVectorizer
+
+# Input data: Each row is a bag of words with a ID.
+df = spark.createDataFrame([
+    (0, "a b c".split(" ")),
+    (1, "a b b c a".split(" "))
+], ["id", "words"])
+
+# fit a CountVectorizerModel from the corpus.
+cv = CountVectorizer(inputCol="words", outputCol="features", vocabSize=3, minDF=2.0)
+
+model = cv.fit(df)
+
+result = model.transform(df)
+result.show(truncate=False)
