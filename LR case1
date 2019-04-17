@@ -1,0 +1,62 @@
+df = spark.read.csv('/FileStore/tables/cruise_ship_info.csv',inferSchema=True,header=True)
+
+df.printSchema()
+
+Dealing with the Cruise_line categorical variable
+Ship Name is a useless arbitrary string, but the cruise_line itself may be useful. Let's make it into a categorical variable!
+
+df.groupBy('Cruise_line').count().show()
+
+from pyspark.ml.feature import StringIndexer
+indexer = StringIndexer(inputCol="Cruise_line", outputCol="cruise_cat")
+indexed = indexer.fit(df).transform(df)
+indexed.head(5)
+
+from pyspark.ml.linalg import Vectors
+from pyspark.ml.feature import VectorAssembler
+
+indexed.columns
+
+assembler = VectorAssembler(
+  inputCols=['Age',
+             'Tonnage',
+             'passengers',
+             'length',
+             'cabins',
+             'passenger_density',
+             'cruise_cat'],
+    outputCol="features")
+    
+output = assembler.transform(indexed)
+output.select("features", "crew").show()
+
+final_data = output.select("features", "crew")
+
+train_data,test_data = final_data.randomSplit([0.7,0.3])
+
+from pyspark.ml.regression import LinearRegression
+# Create a Linear Regression Model object
+lr = LinearRegression(labelCol='crew')
+
+# Fit the model to the data and call this model lrModel
+lrModel = lr.fit(train_data)
+
+# Print the coefficients and intercept for linear regression
+print("Coefficients: {} Intercept: {}".format(lrModel.coefficients,lrModel.intercept))
+
+test_results = lrModel.evaluate(test_data)
+
+print("RMSE: {}".format(test_results.rootMeanSquaredError))
+print("MSE: {}".format(test_results.meanSquaredError))
+print("R2: {}".format(test_results.r2))
+
+# R2 of 0.92 is pretty good, let's check the data a little closer
+from pyspark.sql.functions import corr
+
+df.select(corr('crew','passengers')).show()
+
+df.select(corr('crew','cabins')).show()
+
+from pyspark.ml.stat import Correlation
+r1 = Correlation.corr(output, "features").head()
+print("Pearson correlation matrix:\n" + str(r1[0]))
