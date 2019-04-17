@@ -1,0 +1,137 @@
+Spark Operations=transformations + actions
+Basic RDD transformations: map, filter, flatMap, union
+Execution of the operation only starts when an action is run
+Eg.
+RDD = sc.parallelize([1,2,3,4])
+
+RDD_map = RDD.map(lambda x:x*x)
+RDD_filter = RDD.filter(lambda x:x>2)
+RDD_flatmap = RDD.flatMap(lambda x:x.split(“”))
+
+Eg.
+L2 = lambda x: x<5
+V2 = range(1,11)
+print(list(filter(L2,V2)))
+
+# Create my_list
+my_list2 = range(1,51)
+# Filter numbers divisible by 10
+filtered_list = list(filter(lambda x:x%10==0, my_list2))
+# Print the numbers divisible by 10
+print("Numbers divisible by 10 are:", filtered_list)
+
+
+RDD.collect-returns all the element of the dataset as an array
+RDD.take(n)-returns an array with the first n elements of the data 
+RDD.first()-prints the first element of the RDD
+RDD.count()-returns the number of elements in the RDD
+RDD.reduceByKey()-combines values with the same key
+RDD.sortByKey()-orders pair RDD by key 
+RDD.groupbykey()-groups all the values with the same key in the pair RDD
+RDD.join(what)-joins the two pair RDDs based on their key
+
+LP2
+# Let Spark know about the header and infer the Schema types!
+df = spark.read.csv('/FileStore/tables/appl_stock.csv',inferSchema=True,header=True)
+
+df.filter( (df["Close"] < 200) & (df['Open'] > 200) ).show()
+df.filter(df["Low"] == 197.16).show()
+
+
+
+1.Some data types make it easier to infer schema (like tabular formats such as csv which we will show later). 
+However you often have to set the schema yourself if you aren't dealing with a .read method that doesn't have inferSchema() built-in.
+Spark has all the tools you need for this, it just requires a very specific structure:
+
+from pyspark.sql.types import StructField,StringType,IntegerType,StructType
+
+data_schema = [StructField("age", IntegerType(), True),StructField("name", StringType(), True)]
+final_struc = StructType(fields=data_schema)
+df = spark.read.json('/FileStore/tables/people.json', schema=final_struc)
+df.printSchema()
+
+2.# Adding a new column with a simple copy
+df.withColumn('newage',df['age']).show()
+# Simple Rename
+df.withColumnRenamed('age','supernewage').show()
+df.withColumn('doubleage',df['age']*2).show()
+
+3.# Register the DataFrame as a SQL temporary view
+df.createOrReplaceTempView("people")
+sql_results = spark.sql("SELECT * FROM people")
+spark.sql("SELECT * FROM people WHERE age=30").show()
+
+4.df.groupBy("Company").mean().show()
+# Count
+df.groupBy("Company").count().show()
+
+5. # Max sales across everything
+df.agg({'Sales':'max'}).show()
+
+6.grouped = df.groupBy("Company")
+grouped.agg({"Sales":'max'}).show()
+
+7. from pyspark.sql.functions import countDistinct, avg,stddev
+Often you will want to change the name, use the .alias() method for this:
+df.select(countDistinct("Sales").alias("Distinct Sales")).show()
+
+
+
+
+8.That is a lot of precision for digits! Let's use the format_number to fix that!
+
+from pyspark.sql.functions import format_number
+sales_std = df.select(stddev("Sales").alias('std'))
+# format_number("col_name",decimal places)
+sales_std.select(format_number('std',2)).show()
+
+9. # Descending call off the column itself.
+df.orderBy(df["Sales"].desc()).show()
+
+df.orderBy("Sales").show()
+
+10.
+(1)Drop the missing data
+You can use the .na functions for missing data. The drop command has the following parameters:
+    df.na.drop(how='any', thresh=None, subset=None)
+    * param how: 'any' or 'all'
+        If 'any', drop a row if it contains any nulls.
+        If 'all', drop a row only if all its values are null.
+    * param thresh: int, default None
+        If specified, drop rows that have less than `thresh` non-null values.
+        This overwrites the `how` parameter.
+    * param subset: 
+        optional list of column names to consider.
+# Has to have at least 2 NON-null values
+df.na.drop(thresh=2).show()
+df.na.drop(subset=["Sales"]).show()
+
+(2)df.na.fill(0).show() 
+
+df.na.fill('No Name',subset=['Name']).show()
+
+from pyspark.sql.functions import mean
+mean_val = df.select(mean(df['Sales'])).collect()
+# Weird nested formatting of Row object!
+mean_val[0][0]
+mean_sales = mean_val[0][0]
+df.na.fill(mean_sales,["Sales"]).show()
+
+
+
+11. Let's walk through how to grab parts of the timestamp data
+From pyspark.sql.functions import format_number,dayofmonth,hour,dayofyear,month,year,weekofyear,date_format
+df.select(dayofmonth(df['Date'])).show()
+df.select(hour(df['Date'])).show()
+df.select(dayofyear(df['Date'])).show()
+df.select(month(df['Date'])).show()
+df.select(year(df['Date'])).show()
+
+12.
+newdf = df.withColumn("Year",year(df['Date']))
+newdf.groupBy("Year").mean().show()
+newdf.groupBy("Year").mean()[['Year','avg(Close)']].show()
+
+result = result.select('Year',format_number('avg(Close)',2).alias("Mean Close"))
+result.show()
+
