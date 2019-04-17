@@ -1,0 +1,33 @@
+(1)from pyspark.ml.regression import LinearRegression
+(2)Setting Up DataFrame for Machine Learning
+from pyspark.ml.linalg import Vectors
+from pyspark.ml.feature import VectorAssembler
+
+data.columns
+
+assembler = VectorAssembler(
+    inputCols=["Avg Session Length", "Time on App", 
+               "Time on Website",'Length of Membership'],
+outputCol="features")
+
+output = assembler.transform(data)
+
+output.select("features").head(2)
+final_data = output.select("features",'Yearly Amount Spent')
+
+train_data,test_data = final_data.randomSplit([0.7,0.3])
+
+# Create a Linear Regression Model object
+lr = LinearRegression(labelCol='Yearly Amount Spent')
+# Fit the model to the data and call this model lrModel
+lrModel = lr.fit(train_data,)
+# Print the coefficients and intercept for linear regression
+print("Coefficients: {} Intercept: {}".format(lrModel.coefficients,lrModel.intercept))
+test_results = lrModel.evaluate(test_data)
+unlabeled_data = test_data.select('features')
+predictions = lrModel.transform(unlabeled_data)
+predictions.show()
+print("RMSE: {}".format(test_results.rootMeanSquaredError))
+print("MSE: {}".format(test_results.meanSquaredError))
+# Find the R^2
+print(lrModel.summary.r2)
