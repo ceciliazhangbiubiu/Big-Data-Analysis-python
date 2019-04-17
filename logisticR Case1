@@ -1,0 +1,61 @@
+data = spark.read.csv('/FileStore/tables/customer_churn.csv',inferSchema=True,
+                     header=True)
+                     
+data.printSchema()
+
+data.columns
+
+display(data.describe())
+
+Format for MLlib
+We'll ues the numerical columns. We'll include Account Manager because its easy enough, but keep in mind it probably won't be any sort of a signal because the agency mentioned its randomly assigned!
+
+from pyspark.ml.feature import VectorAssembler
+
+assembler = VectorAssembler(inputCols=['Age',
+ 'Total_Purchase',
+ 'Account_Manager',
+ 'Years',
+ 'Num_Sites'],outputCol='features')
+ 
+ output = assembler.transform(data)
+ 
+ final_data = output.select('features','churn')
+ 
+ train_churn,test_churn = final_data.randomSplit([0.7,0.3])
+ 
+ from pyspark.ml.classification import LogisticRegression
+ 
+ lr_churn = LogisticRegression(labelCol='churn')
+ 
+ fitted_churn_model = lr_churn.fit(train_churn)
+ 
+ training_sum = fitted_churn_model.summary
+ 
+ training_sum.predictions.describe().show()
+ 
+ from pyspark.ml.evaluation import BinaryClassificationEvaluator
+ 
+ pred_and_labels = fitted_churn_model.evaluate(test_churn)
+ 
+ pred_and_labels.predictions.show()
+ 
+ churn_eval = BinaryClassificationEvaluator(rawPredictionCol='prediction',
+                                           labelCol='churn')
+                                           
+ auc = churn_eval.evaluate(pred_and_labels.predictions)
+ 
+ final_lr_model = lr_churn.fit(final_data)
+ 
+ new_customers = spark.read.csv('/FileStore/tables/new_customers.csv',inferSchema=True,
+                              header=True)
+ 
+ new_customers.printSchema()
+ 
+ test_new_customers = assembler.transform(new_customers)
+ 
+ test_new_customers.printSchema()
+ 
+ final_results = final_lr_model.transform(test_new_customers)
+ 
+ final_results.select('Company','prediction').show()
